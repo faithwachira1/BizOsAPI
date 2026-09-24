@@ -12,9 +12,17 @@ const planService = require('../../services/planService');
 const list = asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const filter = tenantFilter(req);
+
   if (req.query.active !== undefined) filter.active = req.query.active === 'true';
   if (req.query.category) filter.category = req.query.category;
-  if (req.query.search) filter.name = { $regex: req.query.search, $options: 'i' };
+  if (req.query.location) filter.location = req.query.location;
+  if (req.query.search) {
+    filter.$or = [
+      { name: { $regex: req.query.search, $options: 'i' } },
+      { sku: { $regex: req.query.search, $options: 'i' } },
+      { supplier: { $regex: req.query.search, $options: 'i' } },
+    ];
+  }
 
   const [items, total] = await Promise.all([
     Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -45,6 +53,9 @@ const create = asyncHandler(async (req, res) => {
     sku: req.body.sku,
     barcode: req.body.barcode,
     category: req.body.category,
+    unit: req.body.unit || 'piece',
+    supplier: req.body.supplier || null,
+    location: req.body.location || null,
     price,
     cost: req.body.cost || 0,
     stock: req.body.stock || 0,
@@ -79,6 +90,9 @@ const update = asyncHandler(async (req, res) => {
     'sku',
     'barcode',
     'category',
+    'unit',
+    'supplier',
+    'location',
     'price',
     'cost',
     'lowStockThreshold',
@@ -92,7 +106,7 @@ const update = asyncHandler(async (req, res) => {
   const product = await Product.findOneAndUpdate(
     tenantFilter(req, { _id: req.params.id }),
     patch,
-    { new: true }
+    { new: true, runValidators: true }
   ).lean();
 
   if (!product) throw ApiError.notFound('PRODUCT_NOT_FOUND', 'Product not found');

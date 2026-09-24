@@ -14,6 +14,14 @@ const list = asyncHandler(async (req, res) => {
   if (req.query.lowStock === 'true') {
     filter.$expr = { $lte: ['$stock', '$lowStockThreshold'] };
   }
+  if (req.query.category) filter.category = req.query.category;
+  if (req.query.location) filter.location = req.query.location;
+  if (req.query.search) {
+    filter.$or = [
+      { name: { $regex: req.query.search, $options: 'i' } },
+      { sku: { $regex: req.query.search, $options: 'i' } },
+    ];
+  }
 
   const [items, total] = await Promise.all([
     Product.find(filter).sort({ stock: 1 }).skip(skip).limit(limit).lean(),
@@ -60,7 +68,11 @@ const history = asyncHandler(async (req, res) => {
 
   const filter = tenantFilter(req, { productId: req.params.productId });
   const [items, total] = await Promise.all([
-    InventoryMovement.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    InventoryMovement.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     InventoryMovement.countDocuments(filter),
   ]);
 

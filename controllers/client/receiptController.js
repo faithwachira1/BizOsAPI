@@ -18,15 +18,26 @@ const get = asyncHandler(async (req, res) => {
 
   if (!sale) throw ApiError.notFound('SALE_NOT_FOUND', 'Sale not found');
 
+  const s = tenant?.settings || {};
+
   return ok(res, {
     business: {
       name: tenant?.name,
-      logoUrl: tenant?.settings?.logoUrl || null,
-      address: tenant?.settings?.address || null,
-      phone: tenant?.settings?.phone || null,
+      logoUrl: s.logoUrl || null,
+      address: s.address || null,
+      phone: s.phone || null,
+    },
+    settings: {
+      taxRate: Number(s.taxRate ?? 0),
+      taxInclusive: s.taxInclusive === true,
+      receiptShowLogo: s.receiptShowLogo !== false,
+      receiptShowTax: s.receiptShowTax !== false,
+      receiptShowCustomer: s.receiptShowCustomer !== false,
+      receiptShowCashier: s.receiptShowCashier === true,
+      receiptFooter: s.receiptFooter || 'Thank you for your business.',
     },
     sale,
-    footer: tenant?.settings?.receiptFooter || 'Thank you for your business.',
+    footer: s.receiptFooter || 'Thank you for your business.',
   });
 });
 
@@ -37,7 +48,9 @@ const pdf = asyncHandler(async (req, res) => {
   if (!sale) throw ApiError.notFound('SALE_NOT_FOUND', 'Sale not found');
 
   if (sale.receiptPublicId) {
-    const url = cloudinaryService.signedUrl(sale.receiptPublicId, { resource_type: 'raw' });
+    const url = cloudinaryService.signedUrl(sale.receiptPublicId, {
+      resource_type: 'raw',
+    });
     return ok(res, { url });
   }
 

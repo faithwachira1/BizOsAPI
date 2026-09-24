@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { asyncHandler } = require('../../utils/asyncHandler');
 const { ok, created, paginated } = require('../../utils/apiResponse');
 const { parsePagination } = require('../../utils/pagination');
@@ -8,6 +9,7 @@ const { ApiError } = require('../../utils/apiError');
 const Sale = require('../../models/client/Sale');
 const Product = require('../../models/client/Product');
 const Customer = require('../../models/client/Customer');
+const Tenant = require('../../models/admin/Tenant');
 const InventoryMovement = require('../../models/client/InventoryMovement');
 const planService = require('../../services/planService');
 const loyaltyService = require('../../services/loyaltyService');
@@ -36,7 +38,6 @@ const create = asyncHandler(async (req, res) => {
 
   await planService.checkTransactionLimit(req.tenantId, Sale);
 
-  // ---------- loyalty redemption prep ----------
   let loyaltyDiscountValue = 0;
   let redeemResult = null;
 
@@ -51,13 +52,9 @@ const create = asyncHandler(async (req, res) => {
     if (!cfg.loyaltyEnabled) {
       throw ApiError.badRequest('LOYALTY_DISABLED', 'Loyalty is not enabled');
     }
-    loyaltyDiscountValue = loyaltyService.valueOf(
-      loyaltyPointsRedeemed,
-      cfg
-    );
+    loyaltyDiscountValue = loyaltyService.valueOf(loyaltyPointsRedeemed, cfg);
   }
 
-  // ---------- validate products & build line items ----------
   const productIds = items.map((i) => i.productId);
   const products = await Product.find(
     tenantFilter(req, { _id: { $in: productIds } })
@@ -97,11 +94,27 @@ const create = asyncHandler(async (req, res) => {
     });
   }
 
-  const tax = 0;
-  const totalBeforeLoyalty = subtotal - discount + tax;
-  const total = Math.max(0, totalBeforeLoyalty - loyaltyDiscountValue);
+  const tenant = await Tenant.findById(req.tenantId).select('settings').lean();
+  const rawTaxRate = Number(tenant?.settings?.taxRate ?? 0);
+  const taxRate = Number.isFinite(rawTaxRate) && rawTaxRate > 0 ? rawTaxRate : 0;
+  const taxInclusive = tenant?.settings?.taxInclusive === true;
 
-  // ---------- create sale ----------
+  let tax = 0;
+  let total = subtotal - discount;
+
+  if (taxRate > 0) {
+    if (taxInclusive) {
+      const gross = Math.max(0, subtotal - discount);
+      tax = Math.round(gross * (taxRate / (100 + taxRate)));
+      total = gross;
+    } else {
+      tax = Math.round((subtotal - discount) * (taxRate / 100));
+      total = subtotal - discount + tax;
+    }
+  }
+
+  total = Math.max(0, total - loyaltyDiscountValue);
+
   const sale = await Sale.create({
     tenantId: req.tenantId,
     saleNumber: generateSaleNumber(),
@@ -119,7 +132,6 @@ const create = asyncHandler(async (req, res) => {
     loyaltyDiscountValue,
   });
 
-  // ---------- deduct stock ----------
   for (const item of saleItems) {
     const product = productsById[String(item.productId)];
     const newStock = product.stock - item.qty;
@@ -138,7 +150,6 @@ const create = asyncHandler(async (req, res) => {
     });
   }
 
-  // ---------- customer spend tracking ----------
   if (customerId) {
     await Customer.updateOne(
       tenantFilter(req, { _id: customerId }),
@@ -146,7 +157,6 @@ const create = asyncHandler(async (req, res) => {
     );
   }
 
-  // ---------- loyalty redemption commit ----------
   if (loyaltyPointsRedeemed > 0 && customerId) {
     try {
       redeemResult = await loyaltyService.applyChange({
@@ -160,7 +170,6 @@ const create = asyncHandler(async (req, res) => {
         userId: req.user.id,
       });
     } catch (err) {
-      // Redeem failed (e.g. balance shrank) — void the sale to keep things consistent
       logger.error(
         { err: err.message, saleId: sale._id },
         'loyalty redeem failed; voiding sale'
@@ -177,7 +186,6 @@ const create = asyncHandler(async (req, res) => {
     }
   }
 
-  // ---------- loyalty earn (non-blocking) ----------
   if (customerId) {
     try {
       await loyaltyService.earnFromSale({
@@ -212,9 +220,12 @@ const list = asyncHandler(async (req, res) => {
   const { start, end } = resolveDateRange(req.query);
   filter.createdAt = { $gte: start, $lte: end };
 
-  if (req.user.role === 'cashier') filter.cashierId = req.user.id;
-  if (req.query.cashierId && req.user.role !== 'cashier')
-    filter.cashierId = req.query.cashierId;
+  if (req.user.role === 'cashier') {
+    filter.cashierId = new mongoose.Types.ObjectId(req.user.id);
+  }
+  if (req.query.cashierId && req.user.role !== 'cashier') {
+    filter.cashierId = new mongoose.Types.ObjectId(req.query.cashierId);
+  }
   if (req.query.paymentMethod) filter.paymentMethod = req.query.paymentMethod;
 
   const [items, total] = await Promise.all([
@@ -228,11 +239,65 @@ const list = asyncHandler(async (req, res) => {
 const get = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, 'saleId');
 
-  const filter = tenantFilter(req, { _id: req.params.id });
-  if (req.user.role === 'cashier') filter.cashierId = req.user.id;
+  const match = tenantFilter(req, {
+    _id: new mongoose.Types.ObjectId(req.params.id),
+  });
+  if (req.user.role === 'cashier') {
+    match.cashierId = new mongoose.Types.ObjectId(req.user.id);
+  }
 
-  const sale = await Sale.findOne(filter).lean();
+  const rows = await Sale.aggregate([
+    { $match: match },
+    {
+      $lookup: {
+        from: 'customers',
+        localField: 'customerId',
+        foreignField: '_id',
+        as: 'customer',
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'cashierId',
+        foreignField: '_id',
+        as: 'cashier',
+      },
+    },
+    {
+      $addFields: {
+        customer: {
+          $cond: [
+            { $gt: [{ $size: '$customer' }, 0] },
+            {
+              _id: { $arrayElemAt: ['$customer._id', 0] },
+              name: { $arrayElemAt: ['$customer.name', 0] },
+              phone: { $arrayElemAt: ['$customer.phone', 0] },
+              email: { $arrayElemAt: ['$customer.email', 0] },
+            },
+            null,
+          ],
+        },
+        cashier: {
+          $cond: [
+            { $gt: [{ $size: '$cashier' }, 0] },
+            {
+              _id: { $arrayElemAt: ['$cashier._id', 0] },
+              fullName: { $arrayElemAt: ['$cashier.fullName', 0] },
+              email: { $arrayElemAt: ['$cashier.email', 0] },
+              role: { $arrayElemAt: ['$cashier.role', 0] },
+            },
+            null,
+          ],
+        },
+      },
+    },
+    { $limit: 1 },
+  ]);
+
+  const sale = rows[0];
   if (!sale) throw ApiError.notFound('SALE_NOT_FOUND', 'Sale not found');
+
   return ok(res, sale);
 });
 
@@ -270,7 +335,6 @@ const voidSale = asyncHandler(async (req, res) => {
     });
   }
 
-  // Reverse loyalty: subtract any earned points, refund any redeemed points
   if (sale.customerId) {
     try {
       if (sale.loyaltyPointsEarned > 0) {

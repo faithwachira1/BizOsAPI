@@ -7,6 +7,9 @@ const schema = new mongoose.Schema(
     sku: { type: String, trim: true },
     barcode: { type: String, trim: true },
     category: { type: String, trim: true },
+    unit: { type: String, trim: true, default: 'piece' },
+    supplier: { type: String, trim: true, default: null },
+    location: { type: String, trim: true, default: null },
     price: { type: Number, required: true, min: 0 },
     cost: { type: Number, default: 0, min: 0 },
     stock: { type: Number, default: 0 },
@@ -22,6 +25,8 @@ const schema = new mongoose.Schema(
 schema.index({ tenantId: 1, sku: 1 });
 schema.index({ tenantId: 1, barcode: 1 });
 schema.index({ tenantId: 1, active: 1 });
+schema.index({ tenantId: 1, category: 1 });
+schema.index({ tenantId: 1, location: 1 });
 schema.index({ tenantId: 1, name: 'text' });
 
 schema.set('toJSON', {

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const STATUSES = ['draft', 'sent', 'partial', 'paid', 'overdue', 'cancelled'];
+const TYPES = ['subscription', 'customer'];
 
 const itemSchema = new mongoose.Schema(
   {
@@ -14,9 +15,24 @@ const itemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const paymentEntrySchema = new mongoose.Schema(
+  {
+    amount: { type: Number, required: true },
+    method: { type: String, default: null },
+    reference: { type: String, default: null },
+    note: { type: String, default: null },
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    recordedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const schema = new mongoose.Schema(
   {
     tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
+
+    type: { type: String, enum: TYPES, default: 'subscription', index: true },
+
     invoiceNumber: { type: String, required: true },
 
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
@@ -48,6 +64,7 @@ const schema = new mongoose.Schema(
 
     paymentMethod: { type: String, default: null },
     paymentRef: { type: String, default: null },
+    payments: { type: [paymentEntrySchema], default: [] },
 
     paymentInstructions: { type: Array, default: [] },
 
@@ -65,16 +82,18 @@ const schema = new mongoose.Schema(
     pdfUrl: { type: String, default: null },
     pdfPublicId: { type: String, default: null },
 
+    stockDeducted: { type: Boolean, default: false },
+
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );
 
 schema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
+schema.index({ tenantId: 1, type: 1, createdAt: -1 });
 schema.index({ tenantId: 1, status: 1 });
 schema.index({ tenantId: 1, customerId: 1 });
 schema.index({ tenantId: 1, dueDate: 1 });
-schema.index({ tenantId: 1, createdAt: -1 });
 schema.index({ 'stkLastRequest.checkoutRequestId': 1 }, { sparse: true });
 
 schema.set('toJSON', {

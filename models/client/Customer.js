@@ -14,10 +14,10 @@ const schema = new mongoose.Schema(
     address: String,
     notes: String,
     totalSpent: { type: Number, default: 0 },
+    outstanding: { type: Number, default: 0, min: 0 },
     lastPurchaseAt: Date,
     active: { type: Boolean, default: true },
 
-    // loyalty
     points: { type: Number, default: 0, min: 0 },
     pointsUpdatedAt: { type: Date, default: null },
     loyaltyTier: {
@@ -33,6 +33,7 @@ schema.index({ tenantId: 1, phone: 1 });
 schema.index({ tenantId: 1, email: 1 });
 schema.index({ tenantId: 1, name: 1 });
 schema.index({ tenantId: 1, points: -1 });
+schema.index({ tenantId: 1, outstanding: -1 });
 
 schema.set('toJSON', {
   virtuals: true,

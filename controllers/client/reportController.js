@@ -3,6 +3,7 @@ const { ok } = require('../../utils/apiResponse');
 const { tenantFilter } = require('../../utils/tenantScope');
 const { resolveDateRange } = require('../../utils/dateRange');
 const Sale = require('../../models/client/Sale');
+const User = require('../../models/client/User');
 
 const salesSummary = asyncHandler(async (req, res) => {
   const { start, end } = resolveDateRange(req.query);
@@ -74,6 +75,7 @@ const staff = asyncHandler(async (req, res) => {
         ...tenantFilter(req),
         createdAt: { $gte: start, $lte: end },
         voided: { $ne: true },
+        cashierId: { $ne: null },
       },
     },
     {
@@ -81,6 +83,29 @@ const staff = asyncHandler(async (req, res) => {
         _id: '$cashierId',
         totalSales: { $sum: '$total' },
         transactions: { $sum: 1 },
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'user',
+      },
+    },
+    {
+      $addFields: {
+        name: {
+          $ifNull: [{ $arrayElemAt: ['$user.fullName', 0] }, 'Unknown'],
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        totalSales: 1,
+        transactions: 1,
       },
     },
     { $sort: { totalSales: -1 } },

@@ -80,6 +80,41 @@ const me = asyncHandler(async (req, res) => {
   });
 });
 
+const updateMe = asyncHandler(async (req, res) => {
+  const { fullName, phone } = req.body;
+
+  const patch = {};
+  if (fullName !== undefined) {
+    const name = String(fullName).trim();
+    if (name.length < 2) throw ApiError.badRequest('INVALID_NAME', 'Name is too short');
+    patch.fullName = name;
+  }
+  if (phone !== undefined) {
+    patch.phone = phone ? String(phone).trim() : null;
+  }
+
+  if (!Object.keys(patch).length) {
+    throw ApiError.badRequest('NO_CHANGES', 'No fields to update');
+  }
+
+  const user = await User.findByIdAndUpdate(req.user.id, patch, {
+    new: true,
+    runValidators: true,
+  }).lean();
+
+  if (!user) throw ApiError.notFound('USER_NOT_FOUND', 'User not found');
+
+  return ok(res, {
+    id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    status: user.status,
+    mustChangePassword: user.mustChangePassword,
+  });
+});
+
 const refresh = asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) throw ApiError.badRequest('NO_REFRESH', 'Refresh token required');
@@ -137,4 +172,4 @@ const changePassword = asyncHandler(async (req, res) => {
   return ok(res, { changed: true });
 });
 
-module.exports = { logout, me, refresh, changePassword };
+module.exports = { logout, me, updateMe, refresh, changePassword };
