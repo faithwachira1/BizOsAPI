@@ -10,6 +10,8 @@ const Product = require('../../models/client/Product');
 const Customer = require('../../models/client/Customer');
 const InventoryMovement = require('../../models/client/InventoryMovement');
 const planService = require('../../services/planService');
+const loyaltyService = require('../../services/loyaltyService');
+const { logger } = require('../../utils/logger');
 
 function generateSaleNumber() {
   const d = new Date();
@@ -20,18 +22,49 @@ function generateSaleNumber() {
 }
 
 const create = asyncHandler(async (req, res) => {
-  const { items, paymentMethod, customerId, discount = 0 } = req.body;
+  const {
+    items,
+    paymentMethod,
+    customerId,
+    discount = 0,
+    loyaltyPointsRedeemed = 0,
+  } = req.body;
+
   if (!Array.isArray(items) || !items.length) {
     throw ApiError.badRequest('NO_ITEMS', 'Sale must have items');
   }
 
   await planService.checkTransactionLimit(req.tenantId, Sale);
 
+  // ---------- loyalty redemption prep ----------
+  let loyaltyDiscountValue = 0;
+  let redeemResult = null;
+
+  if (loyaltyPointsRedeemed > 0) {
+    if (!customerId) {
+      throw ApiError.badRequest(
+        'CUSTOMER_REQUIRED_FOR_REDEEM',
+        'Customer required to redeem points'
+      );
+    }
+    const cfg = await loyaltyService.getConfig(req.tenantId);
+    if (!cfg.loyaltyEnabled) {
+      throw ApiError.badRequest('LOYALTY_DISABLED', 'Loyalty is not enabled');
+    }
+    loyaltyDiscountValue = loyaltyService.valueOf(
+      loyaltyPointsRedeemed,
+      cfg
+    );
+  }
+
+  // ---------- validate products & build line items ----------
   const productIds = items.map((i) => i.productId);
   const products = await Product.find(
     tenantFilter(req, { _id: { $in: productIds } })
   ).lean();
-  const productsById = Object.fromEntries(products.map((p) => [p._id.toString(), p]));
+  const productsById = Object.fromEntries(
+    products.map((p) => [p._id.toString(), p])
+  );
 
   let subtotal = 0;
   const saleItems = [];
@@ -39,10 +72,16 @@ const create = asyncHandler(async (req, res) => {
   for (const item of items) {
     const product = productsById[String(item.productId)];
     if (!product) {
-      throw ApiError.badRequest('PRODUCT_NOT_FOUND', `Product ${item.productId} not found`);
+      throw ApiError.badRequest(
+        'PRODUCT_NOT_FOUND',
+        `Product ${item.productId} not found`
+      );
     }
     if (product.stock < item.qty) {
-      throw ApiError.badRequest('INSUFFICIENT_STOCK', `Not enough stock for ${product.name}`);
+      throw ApiError.badRequest(
+        'INSUFFICIENT_STOCK',
+        `Not enough stock for ${product.name}`
+      );
     }
 
     const lineTotal = product.price * item.qty;
@@ -59,8 +98,10 @@ const create = asyncHandler(async (req, res) => {
   }
 
   const tax = 0;
-  const total = subtotal - discount + tax;
+  const totalBeforeLoyalty = subtotal - discount + tax;
+  const total = Math.max(0, totalBeforeLoyalty - loyaltyDiscountValue);
 
+  // ---------- create sale ----------
   const sale = await Sale.create({
     tenantId: req.tenantId,
     saleNumber: generateSaleNumber(),
@@ -74,8 +115,11 @@ const create = asyncHandler(async (req, res) => {
     paymentStatus: 'paid',
     cashierId: req.user.id,
     customerId: customerId || null,
+    loyaltyPointsRedeemed: loyaltyPointsRedeemed || 0,
+    loyaltyDiscountValue,
   });
 
+  // ---------- deduct stock ----------
   for (const item of saleItems) {
     const product = productsById[String(item.productId)];
     const newStock = product.stock - item.qty;
@@ -94,6 +138,7 @@ const create = asyncHandler(async (req, res) => {
     });
   }
 
+  // ---------- customer spend tracking ----------
   if (customerId) {
     await Customer.updateOne(
       tenantFilter(req, { _id: customerId }),
@@ -101,7 +146,63 @@ const create = asyncHandler(async (req, res) => {
     );
   }
 
-  return created(res, sale.toObject());
+  // ---------- loyalty redemption commit ----------
+  if (loyaltyPointsRedeemed > 0 && customerId) {
+    try {
+      redeemResult = await loyaltyService.applyChange({
+        tenantId: req.tenantId,
+        customerId,
+        points: -Math.abs(loyaltyPointsRedeemed),
+        type: 'redeem',
+        reason: `Redeemed on sale ${sale.saleNumber}`,
+        refType: 'sale',
+        refId: sale._id,
+        userId: req.user.id,
+      });
+    } catch (err) {
+      // Redeem failed (e.g. balance shrank) — void the sale to keep things consistent
+      logger.error(
+        { err: err.message, saleId: sale._id },
+        'loyalty redeem failed; voiding sale'
+      );
+      sale.voided = true;
+      sale.voidReason = 'Loyalty redemption failed';
+      sale.voidedBy = req.user.id;
+      sale.voidedAt = new Date();
+      await sale.save();
+      throw ApiError.badRequest(
+        'REDEEM_FAILED',
+        err.message || 'Loyalty redemption failed'
+      );
+    }
+  }
+
+  // ---------- loyalty earn (non-blocking) ----------
+  if (customerId) {
+    try {
+      await loyaltyService.earnFromSale({
+        tenantId: req.tenantId,
+        customerId,
+        total,
+        saleId: sale._id,
+        userId: req.user.id,
+      });
+    } catch (err) {
+      logger.error(
+        { err: err.message, saleId: sale._id },
+        'loyalty earn failed (sale still succeeded)'
+      );
+    }
+  }
+
+  return created(res, {
+    ...sale.toObject(),
+    loyalty: {
+      pointsRedeemed: loyaltyPointsRedeemed || 0,
+      discountValue: loyaltyDiscountValue,
+      balanceAfterRedeem: redeemResult?.points ?? null,
+    },
+  });
 });
 
 const list = asyncHandler(async (req, res) => {
@@ -112,7 +213,8 @@ const list = asyncHandler(async (req, res) => {
   filter.createdAt = { $gte: start, $lte: end };
 
   if (req.user.role === 'cashier') filter.cashierId = req.user.id;
-  if (req.query.cashierId && req.user.role !== 'cashier') filter.cashierId = req.query.cashierId;
+  if (req.query.cashierId && req.user.role !== 'cashier')
+    filter.cashierId = req.query.cashierId;
   if (req.query.paymentMethod) filter.paymentMethod = req.query.paymentMethod;
 
   const [items, total] = await Promise.all([
@@ -139,7 +241,8 @@ const voidSale = asyncHandler(async (req, res) => {
 
   const sale = await Sale.findOne(tenantFilter(req, { _id: req.params.id }));
   if (!sale) throw ApiError.notFound('SALE_NOT_FOUND', 'Sale not found');
-  if (sale.voided) throw ApiError.badRequest('ALREADY_VOIDED', 'Sale already voided');
+  if (sale.voided)
+    throw ApiError.badRequest('ALREADY_VOIDED', 'Sale already voided');
 
   sale.voided = true;
   sale.voidReason = req.body.reason || 'No reason provided';
@@ -165,6 +268,41 @@ const voidSale = asyncHandler(async (req, res) => {
       userId: req.user.id,
       balanceAfter: newStock,
     });
+  }
+
+  // Reverse loyalty: subtract any earned points, refund any redeemed points
+  if (sale.customerId) {
+    try {
+      if (sale.loyaltyPointsEarned > 0) {
+        await loyaltyService.applyChange({
+          tenantId: req.tenantId,
+          customerId: sale.customerId,
+          points: -Math.abs(sale.loyaltyPointsEarned),
+          type: 'refund',
+          reason: `Sale voided (${sale.saleNumber})`,
+          refType: 'sale',
+          refId: sale._id,
+          userId: req.user.id,
+        });
+      }
+      if (sale.loyaltyPointsRedeemed > 0) {
+        await loyaltyService.applyChange({
+          tenantId: req.tenantId,
+          customerId: sale.customerId,
+          points: Math.abs(sale.loyaltyPointsRedeemed),
+          type: 'refund',
+          reason: `Redemption reversed (${sale.saleNumber})`,
+          refType: 'sale',
+          refId: sale._id,
+          userId: req.user.id,
+        });
+      }
+    } catch (err) {
+      logger.error(
+        { err: err.message, saleId: sale._id },
+        'loyalty reversal on void failed'
+      );
+    }
   }
 
   return ok(res, sale.toObject());

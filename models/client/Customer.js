@@ -2,7 +2,12 @@ const mongoose = require('mongoose');
 
 const schema = new mongoose.Schema(
   {
-    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: true,
+      index: true,
+    },
     name: { type: String, required: true, trim: true },
     phone: { type: String, trim: true },
     email: { type: String, lowercase: true, trim: true },
@@ -11,6 +16,15 @@ const schema = new mongoose.Schema(
     totalSpent: { type: Number, default: 0 },
     lastPurchaseAt: Date,
     active: { type: Boolean, default: true },
+
+    // loyalty
+    points: { type: Number, default: 0, min: 0 },
+    pointsUpdatedAt: { type: Date, default: null },
+    loyaltyTier: {
+      type: String,
+      enum: ['none', 'bronze', 'silver', 'gold'],
+      default: 'none',
+    },
   },
   { timestamps: true }
 );
@@ -18,6 +32,7 @@ const schema = new mongoose.Schema(
 schema.index({ tenantId: 1, phone: 1 });
 schema.index({ tenantId: 1, email: 1 });
 schema.index({ tenantId: 1, name: 1 });
+schema.index({ tenantId: 1, points: -1 });
 
 schema.set('toJSON', {
   virtuals: true,

@@ -3,6 +3,56 @@ const mongoose = require('mongoose');
 const STATUSES = ['pending_user', 'active', 'rejected', 'suspended', 'expired'];
 const BUSINESS_TYPES = ['retail', 'restaurant', 'salon', 'pharmacy', 'other'];
 
+const settingsSchema = new mongoose.Schema(
+  {
+    // ---- business ----
+    phone: { type: String, default: null },
+    address: { type: String, default: null },
+    taxPin: { type: String, default: null },
+    website: { type: String, default: null },
+    logoUrl: { type: String, default: null },
+    logoPublicId: { type: String, default: null },
+
+    // ---- finance ----
+    currency: { type: String, default: 'KES' },
+    taxRate: { type: Number, default: 16, min: 0, max: 100 },
+    taxInclusive: { type: Boolean, default: false },
+
+    // ---- receipt ----
+    receiptTemplate: {
+      type: String,
+      enum: ['modern', 'detailed', 'minimal'],
+      default: 'modern',
+    },
+    receiptFooter: { type: String, default: 'Thank you for your business.' },
+    receiptShowLogo: { type: Boolean, default: true },
+    receiptShowTax: { type: Boolean, default: true },
+    receiptShowCustomer: { type: Boolean, default: true },
+    receiptShowCashier: { type: Boolean, default: false },
+    receiptPaperSize: {
+      type: String,
+      enum: ['58mm', '80mm', 'A4', 'A5'],
+      default: '80mm',
+    },
+    receiptCopies: { type: Number, default: 1, min: 1, max: 5 },
+
+    // ---- loyalty ----
+    loyaltyEnabled: { type: Boolean, default: false },
+    loyaltyPointsPerCurrency: { type: Number, default: 1, min: 0 },
+    loyaltyCurrencyUnit: { type: Number, default: 100, min: 1 },
+    loyaltyRedeemRate: { type: Number, default: 1, min: 0 },
+    loyaltyMinRedeem: { type: Number, default: 100, min: 0 },
+
+    // ---- payments ----
+    paymentMethods: { type: [String], default: [] },
+
+    // ---- appearance ----
+    compactMode: { type: Boolean, default: false },
+    sounds: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
 const schema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -22,7 +72,7 @@ const schema = new mongoose.Schema(
     suspendedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'SuperAdmin' },
     suspendedReason: String,
     expiresAt: Date,
-    settings: { type: Object, default: {} },
+    settings: { type: settingsSchema, default: () => ({}) },
   },
   { timestamps: true }
 );
