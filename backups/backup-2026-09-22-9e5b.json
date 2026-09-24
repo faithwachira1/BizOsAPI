@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "version": "1.0",
+    "appVersion": "0.1.0",
+    "createdAt": "2026-09-22T06:15:43.576Z",
+    "type": "manual",
+    "hostname": "DESKTOP-002S870",
+    "database": "bizos",
+    "collections": [
+      "tenants",
+      "users",
+      "products",
+      "sales",
+      "payments",
+      "customers",
+      "suppliers",
+      "inventorymovements",
+      "purchaseorders",
+      "invoices",
+      "userinvitations",
+      "dailymetrics",
+      "aiconversations",
+      "superadmins",
+      "platformsettings",
+      "paymentmethods",
+      "aiusagelogs",
+      "legals",
+      "backups",
+      "plans",
+      "pendingactivations"
+    ]
+  },
+  "data": {
+    "tenants": [],
+    "users": [],
+    "products": [],
+    "sales": [],
+    "payments": [],
+    "customers": [],
+    "suppliers": [],
+    "inventorymovements": [],
+    "purchaseorders": [],
+    "invoices": [],
+    "userinvitations": [],
+    "dailymetrics": [],
+    "aiconversations": [],
+    "superadmins": [
+      {
+        "_id": "6ab1723f448ee889185dfc36",
+        "email": "davismcintyre5@gmail.com",
+        "passwordHash": "$2b$12$Trl5ThMgb0pLvOxFH0zX/OS02SHISOdyhXu//JvvaG7UOCEEZETfW",
+        "fullName": "Davix HDM",
+        "role": "super_admin",
+        "status": "active",
+        "twoFactorEnabled": false,
+        "createdAt": "2026-09-21T18:06:55.930Z",
+        "updatedAt": "2026-09-22T05:52:21.569Z",
+        "__v": 0,
+        "lastLoginAt": "2026-09-22T05:52:21.568Z"
+      }
+    ],
+    "platformsettings": [],
+    "paymentmethods": [],
+    "aiusagelogs": [
+      {
+        "_id": "6ab178b634a3c33315d9920b",
+        "tenantId": null,
+        "type": "public_chat",
+        "tokensUsed": 471,
+        "latencyMs": 11947,
+        "provider": "groq",
+        "success": true,
+        "promptPreview": "You are the AI assistant on BizOS's landing page. BizOS is a multi-purpose point-of-sale platform for small businesses.\n\nCore features:\n- Point of sale (cash, card, M-Pesa)\n- Inventory and stock manag",
+        "createdAt": "2026-09-21T18:34:30.648Z",
+        "updatedAt": "2026-09-21T18:34:30.648Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab178ee34a3c33315d9920d",
+        "tenantId": null,
+        "type": "public_chat",
+        "tokensUsed": 487,
+        "latencyMs": 4609,
+        "provider": "groq",
+        "success": true,
+        "promptPreview": "You are the AI assistant on BizOS's landing page. BizOS is a multi-purpose point-of-sale platform for small businesses.\n\nCore features:\n- Point of sale (cash, card, M-Pesa)\n- Inventory and stock manag",
+        "createdAt": "2026-09-21T18:35:26.642Z",
+        "updatedAt": "2026-09-21T18:35:26.642Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab1790734a3c33315d9920f",
+        "tenantId": null,
+        "type": "public_chat",
+        "tokensUsed": 472,
+        "latencyMs": 4221,
+        "provider": "groq",
+        "success": true,
+        "promptPreview": "You are the AI assistant on BizOS's landing page. BizOS is a multi-purpose point-of-sale platform for small businesses.\n\nCore features:\n- Point of sale (cash, card, M-Pesa)\n- Inventory and stock manag",
+        "createdAt": "2026-09-21T18:35:51.111Z",
+        "updatedAt": "2026-09-21T18:35:51.111Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab1791834a3c33315d99211",
+        "tenantId": null,
+        "type": "public_chat",
+        "tokensUsed": 586,
+        "latencyMs": 4364,
+        "provider": "groq",
+        "success": true,
+        "promptPreview": "You are the AI assistant on BizOS's landing page. BizOS is a multi-purpose point-of-sale platform for small businesses.\n\nCore features:\n- Point of sale (cash, card, M-Pesa)\n- Inventory and stock manag",
+        "createdAt": "2026-09-21T18:36:08.227Z",
+        "updatedAt": "2026-09-21T18:36:08.227Z",
+        "__v": 0
+      },
+      {
+        "_id": "6ab1792734a3c33315d99213",
+        "tenantId": null,
+        "type": "public_chat",
+        "tokensUsed": 598,
+        "latencyMs": 3876,
+        "provider": "groq",
+        "success": true,
+        "promptPreview": "You are the AI assistant on BizOS's landing page. BizOS is a multi-purpose point-of-sale platform for small businesses.\n\nCore features:\n- Point of sale (cash, card, M-Pesa)\n- Inventory and stock manag",
+        "createdAt": "2026-09-21T18:36:23.447Z",
+        "updatedAt": "2026-09-21T18:36:23.447Z",
+        "__v": 0
+      }
+    ],
+    "legals": [],
+    "backups": [
+      {
+        "_id": "6ab21d0fc7061105d40c9e5b",
+        "filename": "pending",
+        "sizeBytes": 0,
+        "type": "manual",
+        "status": "running",
+        "startedAt": "2026-09-22T06:15:43.540Z",
+        "triggeredBy": "6ab1723f448ee889185dfc36",
+        "collections": [],
+        "createdAt": "2026-09-22T06:15:43.541Z",
+        "updatedAt": "2026-09-22T06:15:43.541Z",
+        "__v": 0
+      }
+    ],
+    "plans": [],
+    "pendingactivations": []
+  }
+}
