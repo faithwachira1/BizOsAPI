@@ -4,6 +4,7 @@ const Supplier = require('../models/client/Supplier');
 const Product = require('../models/client/Product');
 const PurchaseOrder = require('../models/client/PurchaseOrder');
 const InventoryMovement = require('../models/client/InventoryMovement');
+const notificationTriggers = require('./notificationTriggers');
 const { logger } = require('../utils/logger');
 
 function generatePoNumber() {
@@ -296,6 +297,14 @@ async function receive(tenantId, userId, id, payload) {
       supplier.lastOrderAt = new Date();
       await supplier.save();
     }
+  }
+
+  if (po.status === 'received') {
+    await notificationTriggers.onPurchaseReceived({
+      tenantId,
+      po: po.toObject(),
+      userId,
+    });
   }
 
   return po.toObject();

@@ -22,6 +22,7 @@ const heldSaleRoutes = require('./heldSaleRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const customerInvoiceRoutes = require('./customerInvoiceRoutes');
 const purchaseOrderRoutes = require('./purchaseOrderRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 const router = Router();
 
@@ -47,5 +48,6 @@ router.use('/held-sales', heldSaleRoutes);
 router.use('/invoices/customer', customerInvoiceRoutes);
 router.use('/invoices', invoiceRoutes);
 router.use('/purchase-orders', purchaseOrderRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

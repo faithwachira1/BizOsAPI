@@ -13,6 +13,7 @@ const Tenant = require('../../models/admin/Tenant');
 const InventoryMovement = require('../../models/client/InventoryMovement');
 const planService = require('../../services/planService');
 const loyaltyService = require('../../services/loyaltyService');
+const notificationTriggers = require('../../services/notificationTriggers');
 const { logger } = require('../../utils/logger');
 
 function generateSaleNumber() {
@@ -134,7 +135,8 @@ const create = asyncHandler(async (req, res) => {
 
   for (const item of saleItems) {
     const product = productsById[String(item.productId)];
-    const newStock = product.stock - item.qty;
+    const oldStock = product.stock;
+    const newStock = oldStock - item.qty;
 
     await Product.updateOne({ _id: product._id }, { $set: { stock: newStock } });
 
@@ -148,6 +150,17 @@ const create = asyncHandler(async (req, res) => {
       userId: req.user.id,
       balanceAfter: newStock,
     });
+
+    const wasAbove = oldStock > product.lowStockThreshold;
+    const isAtOrBelow = newStock <= product.lowStockThreshold;
+
+    if (wasAbove && isAtOrBelow) {
+      await notificationTriggers.onLowStock({
+        tenantId: req.tenantId,
+        product: { ...product, stock: newStock },
+        userId: null,
+      });
+    }
   }
 
   if (customerId) {
@@ -368,6 +381,12 @@ const voidSale = asyncHandler(async (req, res) => {
       );
     }
   }
+
+  await notificationTriggers.onSaleVoided({
+    tenantId: req.tenantId,
+    sale: sale.toObject(),
+    userId: req.user.id,
+  });
 
   return ok(res, sale.toObject());
 });
