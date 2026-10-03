@@ -134,6 +134,9 @@ async function sendAdminServiceDownEmail(to, data) {
 async function sendAdminBackupFailedEmail(to, data) {
   return sendMail({ to, ...(await render('adminBackupFailed', data)) });
 }
+async function sendAdminBackupSuccessEmail(to, data) {
+  return sendMail({ to, ...(await render('adminBackupSuccess', data)) });
+}
 async function sendAdminRestoreCompleteEmail(to, data) {
   return sendMail({ to, ...(await render('adminRestoreComplete', data)) });
 }
@@ -173,5 +176,6 @@ module.exports = {
   sendAdminPendingDigestEmail,
   sendAdminServiceDownEmail,
   sendAdminBackupFailedEmail,
+  sendAdminBackupSuccessEmail,
   sendAdminRestoreCompleteEmail,
 };

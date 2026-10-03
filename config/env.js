@@ -33,6 +33,9 @@ const optional = [
   'MPESA_SHORTCODE',
   'MPESA_PASSKEY',
   'MPESA_CALLBACK_URL',
+  'MPESA_TILL_NUMBER',
+  'MPESA_TRANSACTION_TYPE',
+  'MPESA_BASE_URL',
   'DISABLE_SCHEDULERS',
 ];
 
@@ -56,6 +59,20 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
 }
+
+const MPESA_ENV = process.env.MPESA_ENV || 'sandbox';
+
+const MPESA_BASE_URL =
+  process.env.MPESA_BASE_URL ||
+  (MPESA_ENV === 'production'
+    ? 'https://api.safaricom.co.ke'
+    : 'https://sandbox.safaricom.co.ke');
+
+const MPESA_TRANSACTION_TYPE =
+  process.env.MPESA_TRANSACTION_TYPE ||
+  (process.env.MPESA_TILL_NUMBER
+    ? 'CustomerBuyGoodsOnline'
+    : 'CustomerPayBillOnline');
 
 const env = Object.freeze({
   nodeEnv: process.env.NODE_ENV,
@@ -99,12 +116,22 @@ const env = Object.freeze({
     key: process.env.HDM_AI_KEY,
   },
   mpesa: {
-    env: process.env.MPESA_ENV || 'sandbox',
+    env: MPESA_ENV,
+    baseUrl: MPESA_BASE_URL,
     consumerKey: process.env.MPESA_CONSUMER_KEY || '',
     consumerSecret: process.env.MPESA_CONSUMER_SECRET || '',
     shortcode: process.env.MPESA_SHORTCODE || '',
+    tillNumber: process.env.MPESA_TILL_NUMBER || '',
     passkey: process.env.MPESA_PASSKEY || '',
     callbackUrl: process.env.MPESA_CALLBACK_URL || '',
+    transactionType: MPESA_TRANSACTION_TYPE,
+    enabled: Boolean(
+      process.env.MPESA_CONSUMER_KEY &&
+        process.env.MPESA_CONSUMER_SECRET &&
+        process.env.MPESA_SHORTCODE &&
+        process.env.MPESA_PASSKEY &&
+        process.env.MPESA_CALLBACK_URL
+    ),
   },
   cors: {
     origins: process.env.CORS_ORIGINS

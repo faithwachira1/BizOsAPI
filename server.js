@@ -77,7 +77,10 @@ async function bootstrap() {
   app.use(helmetMw);
   app.use(corsMw);
 
-  app.use('/api/public/webhooks', express.raw({ type: '*/*' }));
+  app.use(
+    '/api/public/webhooks/stripe',
+    express.raw({ type: 'application/json' })
+  );
 
   app.use(bodyParser);
   app.use(sanitize);

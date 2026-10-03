@@ -36,6 +36,32 @@ const COLLECTIONS = [
 
 const CLOUDINARY_FOLDER = 'bizos/backups';
 
+const SETTING_KEYS = {
+  enabled: 'backup_auto_enabled',
+  frequency: 'backup_frequency',
+  hour: 'backup_hour',
+  minute: 'backup_minute',
+  dayOfWeek: 'backup_day_of_week',
+  dayOfMonth: 'backup_day_of_month',
+  retentionDays: 'backup_retention_days',
+  emailTo: 'backup_notify_emails',
+  emailOnSuccess: 'backup_notify_on_success',
+  emailOnFailure: 'backup_notify_on_fail',
+};
+
+const DEFAULT_SETTINGS = {
+  enabled: false,
+  frequency: 'daily',
+  hour: 3,
+  minute: 0,
+  dayOfWeek: 1,
+  dayOfMonth: 1,
+  retentionDays: 90,
+  emailTo: '',
+  emailOnSuccess: false,
+  emailOnFailure: true,
+};
+
 function formatDate(d) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -133,7 +159,10 @@ async function createBackup({ type = 'manual', triggeredBy = null } = {}) {
 
     const checksum = crypto.createHash('sha256').update(json).digest('hex');
     const completedAt = new Date();
-    const retentionDays = await PlatformSetting.getValue('backup_retention_days', 90);
+    const retentionDays = await PlatformSetting.getValue(
+      SETTING_KEYS.retentionDays,
+      DEFAULT_SETTINGS.retentionDays
+    );
 
     doc.filename = filename;
     doc.publicId = upload.public_id;
@@ -145,7 +174,10 @@ async function createBackup({ type = 'manual', triggeredBy = null } = {}) {
     doc.durationMs = completedAt - startedAt;
     doc.collections = COLLECTIONS;
     doc.recordCounts = recordCounts;
-    doc.retentionUntil = new Date(completedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000);
+    doc.retentionUntil =
+      retentionDays > 0
+        ? new Date(completedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000)
+        : null;
     await doc.save();
 
     logger.info(
@@ -289,7 +321,7 @@ async function cleanupExpired() {
   const now = new Date();
 
   const expired = await Backup.find({
-    retentionUntil: { $lt: now },
+    retentionUntil: { $lt: now, $ne: null },
     status: { $ne: 'expired' },
   });
 
@@ -326,6 +358,122 @@ async function getStats() {
   };
 }
 
+async function getSettings() {
+  const raw = {};
+  for (const [field, key] of Object.entries(SETTING_KEYS)) {
+    raw[field] = await PlatformSetting.getValue(key, undefined);
+  }
+
+  let emailTo = raw.emailTo;
+  if (Array.isArray(emailTo)) emailTo = emailTo[0] || '';
+  else if (typeof emailTo !== 'string') emailTo = '';
+
+  return {
+    enabled: raw.enabled ?? DEFAULT_SETTINGS.enabled,
+    frequency: raw.frequency ?? DEFAULT_SETTINGS.frequency,
+    hour: raw.hour ?? DEFAULT_SETTINGS.hour,
+    minute: raw.minute ?? DEFAULT_SETTINGS.minute,
+    dayOfWeek: raw.dayOfWeek ?? DEFAULT_SETTINGS.dayOfWeek,
+    dayOfMonth: raw.dayOfMonth ?? DEFAULT_SETTINGS.dayOfMonth,
+    retentionDays: raw.retentionDays ?? DEFAULT_SETTINGS.retentionDays,
+    emailTo,
+    emailOnSuccess: raw.emailOnSuccess ?? DEFAULT_SETTINGS.emailOnSuccess,
+    emailOnFailure: raw.emailOnFailure ?? DEFAULT_SETTINGS.emailOnFailure,
+  };
+}
+
+async function updateSettings(payload = {}, adminId = null) {
+  const clean = {};
+
+  if (payload.enabled !== undefined) clean.enabled = Boolean(payload.enabled);
+
+  if (payload.frequency !== undefined) {
+    const allowed = ['hourly', 'daily', 'weekly', 'monthly'];
+    if (!allowed.includes(payload.frequency)) {
+      throw ApiError.badRequest('INVALID_FREQUENCY', 'frequency must be hourly, daily, weekly or monthly');
+    }
+    clean.frequency = payload.frequency;
+  }
+
+  if (payload.hour !== undefined) {
+    const h = Number(payload.hour);
+    if (!Number.isInteger(h) || h < 0 || h > 23) {
+      throw ApiError.badRequest('INVALID_HOUR', 'hour must be 0–23');
+    }
+    clean.hour = h;
+  }
+
+  if (payload.minute !== undefined) {
+    const m = Number(payload.minute);
+    if (!Number.isInteger(m) || m < 0 || m > 59) {
+      throw ApiError.badRequest('INVALID_MINUTE', 'minute must be 0–59');
+    }
+    clean.minute = m;
+  }
+
+  if (payload.dayOfWeek !== undefined) {
+    const d = Number(payload.dayOfWeek);
+    if (!Number.isInteger(d) || d < 0 || d > 6) {
+      throw ApiError.badRequest('INVALID_DAY_OF_WEEK', 'dayOfWeek must be 0–6');
+    }
+    clean.dayOfWeek = d;
+  }
+
+  if (payload.dayOfMonth !== undefined) {
+    const d = Number(payload.dayOfMonth);
+    if (!Number.isInteger(d) || d < 1 || d > 28) {
+      throw ApiError.badRequest('INVALID_DAY_OF_MONTH', 'dayOfMonth must be 1–28');
+    }
+    clean.dayOfMonth = d;
+  }
+
+  if (payload.retentionDays !== undefined) {
+    const r = Number(payload.retentionDays);
+    if (!Number.isInteger(r) || r < 0 || r > 3650) {
+      throw ApiError.badRequest('INVALID_RETENTION', 'retentionDays must be 0–3650');
+    }
+    clean.retentionDays = r;
+  }
+
+  if (payload.emailOnSuccess !== undefined) clean.emailOnSuccess = Boolean(payload.emailOnSuccess);
+  if (payload.emailOnFailure !== undefined) clean.emailOnFailure = Boolean(payload.emailOnFailure);
+
+  if (payload.emailTo !== undefined) {
+    const trimmed = String(payload.emailTo || '').trim();
+    if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      throw ApiError.badRequest('INVALID_EMAIL', 'emailTo is not a valid email');
+    }
+    clean.emailTo = trimmed ? [trimmed] : [];
+  }
+
+  for (const [field, value] of Object.entries(clean)) {
+    await PlatformSetting.setValue(SETTING_KEYS[field], value, adminId);
+  }
+
+  return getSettings();
+}
+
+async function getSchedulerConfig() {
+  const s = await getSettings();
+  return {
+    enabled: s.enabled,
+    frequency: s.frequency,
+    hour: s.hour,
+    minute: s.minute,
+    dayOfWeek: s.dayOfWeek,
+    dayOfMonth: s.dayOfMonth,
+    retentionDays: s.retentionDays,
+    emailTo: s.emailTo ? [s.emailTo] : [],
+    emailOnSuccess: s.emailOnSuccess,
+    emailOnFailure: s.emailOnFailure,
+  };
+}
+
+async function findRecentAutoBackup(withinMs = 60 * 1000) {
+  const cutoff = new Date(Date.now() - withinMs);
+  return Backup.findOne({ type: 'auto', startedAt: { $gte: cutoff } }).lean();
+}
+
 module.exports = {
   createBackup,
   listBackups,
@@ -336,5 +484,11 @@ module.exports = {
   sendBackupByEmail,
   cleanupExpired,
   getStats,
+  getSettings,
+  updateSettings,
+  getSchedulerConfig,
+  findRecentAutoBackup,
+  SETTING_KEYS,
+  DEFAULT_SETTINGS,
   COLLECTIONS,
 };

@@ -30,6 +30,7 @@ const initiate = asyncHandler(async (req, res) => {
 
     const payment = await Payment.create({
       tenantId: req.tenantId,
+      purpose: 'sale',
       saleId: sale._id,
       method: 'mpesa_stk',
       amount: amount || sale.total,
@@ -90,6 +91,7 @@ const recordManual = asyncHandler(async (req, res) => {
 
   const payment = await Payment.create({
     tenantId: req.tenantId,
+    purpose: 'sale',
     saleId: sale._id,
     method,
     amount: paidAmount,

@@ -69,6 +69,16 @@ const remove = asyncHandler(async (req, res) => {
   return noContent(res);
 });
 
+const getSettings = asyncHandler(async (_req, res) => {
+  const settings = await backupService.getSettings();
+  return ok(res, settings);
+});
+
+const updateSettings = asyncHandler(async (req, res) => {
+  const settings = await backupService.updateSettings(req.body, req.admin.id);
+  return ok(res, settings);
+});
+
 module.exports = {
   list,
   createNow,
@@ -77,4 +87,6 @@ module.exports = {
   sendEmail,
   restore,
   remove,
+  getSettings,
+  updateSettings,
 };

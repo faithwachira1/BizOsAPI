@@ -15,7 +15,7 @@ const jobs = [
   { name: 'aiInsights', cron: '0 1 * * *', fn: runAiInsights },
   { name: 'overdueInvoices', cron: '0 2 * * *', fn: runOverdueInvoices },
   { name: 'pendingExpiry', cron: '0 2 * * *', fn: runPendingExpiry },
-  { name: 'autoBackup', cron: '0 3 * * *', fn: runAutoBackup },
+  { name: 'autoBackup', cron: '* * * * *', fn: runAutoBackup },
   { name: 'lowStockAlerts', cron: '0 7 * * *', fn: runLowStockAlerts },
 ];
 

@@ -4,6 +4,7 @@ const { ApiError } = require('../../utils/apiError');
 const paymentInstructionsService = require('../../services/paymentInstructionsService');
 const mpesaService = require('../../services/mpesaService');
 const Invoice = require('../../models/client/Invoice');
+const Payment = require('../../models/client/Payment');
 
 const getMethods = asyncHandler(async (_req, res) => {
   const methods = await paymentInstructionsService.getPublicPaymentMethods();
@@ -22,6 +23,9 @@ const sendStkForInvoice = asyncHandler(async (req, res) => {
 
   if (invoice.status === 'paid') {
     throw ApiError.badRequest('ALREADY_PAID', 'This invoice is already paid');
+  }
+  if (invoice.status === 'cancelled') {
+    throw ApiError.badRequest('INVOICE_CANCELLED', 'This invoice has been cancelled');
   }
 
   const stk = await mpesaService.stkPush({
@@ -44,10 +48,59 @@ const sendStkForInvoice = asyncHandler(async (req, res) => {
     }
   );
 
+  await Payment.create({
+    tenantId: invoice.tenantId,
+    purpose: 'invoice',
+    invoiceId: invoice._id,
+    method: 'mpesa',
+    amount: invoice.amountDue,
+    currency: invoice.currency,
+    status: 'pending',
+    providerRef: stk.checkoutRequestId,
+    providerPayload: stk.raw,
+  });
+
   return created(res, {
     checkoutRequestId: stk.checkoutRequestId,
     message: stk.customerMessage,
   });
 });
 
-module.exports = { getMethods, sendStkForInvoice };
+const checkStkStatus = asyncHandler(async (req, res) => {
+  const { checkoutRequestId } = req.params;
+
+  if (!checkoutRequestId) {
+    throw ApiError.badRequest('MISSING_FIELDS', 'checkoutRequestId required');
+  }
+
+  const payment = await Payment.findOne({
+    purpose: 'invoice',
+    $or: [
+      { providerRef: checkoutRequestId },
+      { mpesaReceipt: checkoutRequestId },
+    ],
+  }).lean();
+
+  if (!payment) {
+    throw ApiError.notFound('PAYMENT_NOT_FOUND', 'Payment not found');
+  }
+
+  const invoice = payment.invoiceId
+    ? await Invoice.findById(payment.invoiceId)
+        .select('invoiceNumber status amountPaid amountDue currency')
+        .lean()
+    : null;
+
+  return ok(res, {
+    status: payment.status,
+    invoiceNumber: invoice?.invoiceNumber || null,
+    invoiceStatus: invoice?.status || null,
+    amountPaid: invoice?.amountPaid || 0,
+    amountDue: invoice?.amountDue || 0,
+    currency: invoice?.currency || payment.currency,
+    receipt: payment.mpesaReceipt || null,
+    failureReason: payment.failureReason || null,
+  });
+});
+
+module.exports = { getMethods, sendStkForInvoice, checkStkStatus };

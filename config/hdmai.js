@@ -11,7 +11,7 @@ const hdmAi = axios.create({
 });
 
 const HDM_AI_ENDPOINTS = Object.freeze({
-  PUBLIC_CHAT: '/api/v1/projects/general/public-chat',
+  PUBLIC_CHAT: '/api/v1/completion',
 });
 
 module.exports = { hdmAi, HDM_AI_ENDPOINTS };

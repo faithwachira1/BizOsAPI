@@ -1164,6 +1164,48 @@ const adminRestoreComplete = ({ brand, filename, collections, at }) => ({
   text: plain([`Restore from ${filename} completed.`, `Collections: ${(collections || []).join(', ')}`, `At: ${at || new Date().toISOString()}`, footer(brand)]),
 });
 
+const adminBackupSuccess = ({
+  brand,
+  filename,
+  sizeBytes,
+  sizeHuman,
+  durationMs,
+  collections,
+  at,
+  downloadUrl,
+}) => ({
+  subject: `Backup completed — ${filename}`,
+  html: layout(brand, {
+    title: 'Backup completed',
+    preheader: `Backup ${filename} finished successfully`,
+    body: `<p style="margin:0 0 12px 0;">Automatic backup completed successfully.</p>
+           <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+             <tr><td style="padding:16px;">
+               <p style="margin:0 0 4px 0;font-size:13px;color:#166534;">Filename</p>
+               <p style="margin:0 0 12px 0;font-size:14px;font-family:monospace;color:#14532d;">${escapeHtml(filename)}</p>
+               <p style="margin:0 0 4px 0;font-size:13px;color:#166534;">Size</p>
+               <p style="margin:0 0 12px 0;font-size:14px;color:#14532d;">${escapeHtml(sizeHuman || `${sizeBytes || 0} B`)}</p>
+               <p style="margin:0 0 4px 0;font-size:13px;color:#166534;">Duration</p>
+               <p style="margin:0 0 12px 0;font-size:14px;color:#14532d;">${escapeHtml(((durationMs || 0) / 1000).toFixed(1))}s</p>
+               <p style="margin:0 0 4px 0;font-size:13px;color:#166534;">Collections</p>
+               <p style="margin:0 0 12px 0;font-size:14px;color:#14532d;">${escapeHtml(String((collections || []).length))}</p>
+               <p style="margin:0 0 4px 0;font-size:13px;color:#166534;">When</p>
+               <p style="margin:0;font-size:14px;color:#14532d;">${escapeHtml(at || new Date().toISOString())}</p>
+             </td></tr>
+           </table>`,
+    cta: downloadUrl ? cta(downloadUrl, 'Download backup') : undefined,
+  }),
+  text: plain([
+    `Backup ${filename} completed.`,
+    `Size: ${sizeHuman || `${sizeBytes || 0} B`}`,
+    `Duration: ${((durationMs || 0) / 1000).toFixed(1)}s`,
+    `Collections: ${(collections || []).length}`,
+    `At: ${at || new Date().toISOString()}`,
+    downloadUrl || '',
+    footer(brand),
+  ]),
+});
+
 module.exports = {
   emailTemplates: {
     verification,
@@ -1199,6 +1241,7 @@ module.exports = {
     adminPendingDigest,
     adminServiceDown,
     adminBackupFailed,
+    adminBackupSuccess,
     adminRestoreComplete,
   },
 };
